@@ -8,6 +8,8 @@ struct ControlSidebarView: View {
             VStack(alignment: .leading, spacing: 16) {
                 titleBlock
                 dataSection
+                featureSection
+                networkSection
                 modelSection
                 trainingSection
                 actionsSection
@@ -76,6 +78,8 @@ struct ControlSidebarView: View {
                     )
                 )
 
+                labeledValue("Architecture", value: controller.architecture)
+
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("Noise")
@@ -100,11 +104,78 @@ struct ControlSidebarView: View {
         }
     }
 
+    private var featureSection: some View {
+        GroupBox("Features") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Choose the transforms fed into the network input layer.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ForEach(FeatureKind.allCases) { feature in
+                    Toggle(isOn: Binding(
+                        get: { controller.config.features.contains(feature) },
+                        set: { enabled in
+                            controller.setFeature(feature, enabled: enabled)
+                        }
+                    )) {
+                        Text(feature.rawValue)
+                    }
+                    .toggleStyle(.checkbox)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var networkSection: some View {
+        GroupBox("Hidden Layers") {
+            VStack(alignment: .leading, spacing: 14) {
+                Stepper(
+                    value: Binding(
+                        get: { controller.config.hiddenLayerCount },
+                        set: { value in
+                            controller.setHiddenLayerCount(value)
+                        }
+                    ),
+                    in: TrainingConfig.hiddenLayerCountRange
+                ) {
+                    HStack {
+                        Text("Layer Count")
+                        Spacer()
+                        Text("\(controller.config.hiddenLayerCount)")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                ForEach(0..<controller.config.hiddenLayerCount, id: \.self) { index in
+                    Stepper(
+                        value: Binding(
+                            get: { controller.config.hiddenLayerSizes[index] },
+                            set: { value in
+                                controller.setHiddenLayerSize(value, at: index)
+                            }
+                        ),
+                        in: TrainingConfig.hiddenLayerSizeRange
+                    ) {
+                        HStack {
+                            Text("Hidden \(index + 1)")
+                            Spacer()
+                            Text("\(controller.config.hiddenLayerSizes[index]) neurons")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     private var modelSection: some View {
         GroupBox("Model") {
             VStack(alignment: .leading, spacing: 14) {
-                labeledValue("Widths", value: controller.architecture)
-
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Activation")
                     Picker("Activation", selection: Binding(

@@ -35,6 +35,36 @@ enum TargetKind: String, CaseIterable, Identifiable {
     }
 }
 
+enum FeatureKind: String, CaseIterable, Identifiable {
+    case x = "x"
+    case xSquared = "x^2"
+    case sine = "sin(x)"
+    case absolute = "|x|"
+    case bias = "1"
+
+    var id: Self { self }
+
+    func value(at x: Double) -> Double {
+        switch self {
+        case .x:
+            return x
+        case .xSquared:
+            return x * x
+        case .sine:
+            return sin(x)
+        case .absolute:
+            return abs(x)
+        case .bias:
+            return 1.0
+        }
+    }
+
+    static func orderedSelection(from features: [FeatureKind]) -> [FeatureKind] {
+        let selected = Set(features)
+        return allCases.filter { selected.contains($0) }
+    }
+}
+
 enum OptimizerKind: String, CaseIterable, Identifiable {
     case sgd = "SGD"
     case momentum = "Momentum"
@@ -164,8 +194,13 @@ enum ActivationKind: String, CaseIterable, Identifiable {
 struct TrainingConfig: Equatable {
     static let sampleCountRange = 1...256
     static let epochRange = 200...2500
+    static let hiddenLayerCountRange = 1...3
+    static let hiddenLayerSizeRange = 1...8
 
     var target: TargetKind = .reciprocalBell
+    var features: [FeatureKind] = [.x, .xSquared]
+    var hiddenLayerCount: Int = 2
+    var hiddenLayerSizes: [Int] = [6, 4, 3]
     var sampleCount: Int = 96
     var seed: UInt64 = 42
     var optimizer: OptimizerKind = .momentum
@@ -174,4 +209,8 @@ struct TrainingConfig: Equatable {
     var learningRate: Double = 0.08
     var epochCount: Int = 1500
     var noise: Double = 0.055
+
+    var activeHiddenLayerSizes: [Int] {
+        Array(hiddenLayerSizes.prefix(hiddenLayerCount))
+    }
 }

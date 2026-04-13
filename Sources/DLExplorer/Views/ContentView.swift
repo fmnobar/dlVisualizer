@@ -20,6 +20,13 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 18) {
             header
 
+            PlaygroundNetworkView(
+                snapshot: controller.latestSnapshot?.network,
+                config: controller.config,
+                architecture: controller.architecture
+            )
+            .frame(maxWidth: .infinity, minHeight: 360)
+
             PredictionChartView(
                 targetSamples: controller.targetSamples,
                 snapshot: controller.latestSnapshot,
@@ -27,7 +34,7 @@ struct ContentView: View {
                 architecture: controller.architecture,
                 isTraining: controller.isTraining
             )
-            .frame(maxWidth: .infinity, minHeight: 470)
+            .frame(maxWidth: .infinity, minHeight: 450)
 
             LossChartView(snapshot: controller.latestSnapshot, isTraining: controller.isTraining)
                 .frame(maxWidth: .infinity, minHeight: 260)
@@ -41,7 +48,7 @@ struct ContentView: View {
             Text("DL Explorer")
                 .font(.system(size: 30, weight: .semibold, design: .rounded))
 
-            Text("Watch a tiny network learn \(controller.targetEquation) from noisy data in real time.")
+            Text("Watch a tiny network learn \(controller.targetEquation) from noisy data in real time, with a live playground-style network view.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
 

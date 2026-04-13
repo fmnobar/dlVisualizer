@@ -9,8 +9,6 @@ final class TrainingController {
     private(set) var isTraining = false
     var config: TrainingConfig
 
-    let architecture = "[1, 32, 32, 1]"
-
     private let evaluationXs = RegressionDataFactory.makeEvaluationGrid()
     private var scheduledRestartTask: Task<Void, Never>?
     private var trainingTask: Task<Void, Never>?
@@ -20,6 +18,11 @@ final class TrainingController {
         config.target.equation
     }
 
+    var architecture: String {
+        let widths = [config.features.count] + config.activeHiddenLayerSizes + [1]
+        return widths.description
+    }
+
     init(config: TrainingConfig = TrainingConfig()) {
         self.config = config
         restartTraining(immediate: true)
@@ -27,9 +30,42 @@ final class TrainingController {
 
     func updateConfig(_ mutate: (inout TrainingConfig) -> Void) {
         mutate(&config)
+        config.features = FeatureKind.orderedSelection(from: config.features)
+        if config.features.isEmpty {
+            config.features = [.x]
+        }
         config.sampleCount = min(max(config.sampleCount, TrainingConfig.sampleCountRange.lowerBound), TrainingConfig.sampleCountRange.upperBound)
         config.epochCount = min(max(config.epochCount, TrainingConfig.epochRange.lowerBound), TrainingConfig.epochRange.upperBound)
+        config.hiddenLayerCount = min(max(config.hiddenLayerCount, TrainingConfig.hiddenLayerCountRange.lowerBound), TrainingConfig.hiddenLayerCountRange.upperBound)
+        for index in config.hiddenLayerSizes.indices {
+            config.hiddenLayerSizes[index] = min(max(config.hiddenLayerSizes[index], TrainingConfig.hiddenLayerSizeRange.lowerBound), TrainingConfig.hiddenLayerSizeRange.upperBound)
+        }
         restartTraining()
+    }
+
+    func setFeature(_ feature: FeatureKind, enabled: Bool) {
+        updateConfig { config in
+            var selected = Set(config.features)
+            if enabled {
+                selected.insert(feature)
+            } else {
+                selected.remove(feature)
+            }
+            config.features = FeatureKind.allCases.filter { selected.contains($0) }
+        }
+    }
+
+    func setHiddenLayerCount(_ count: Int) {
+        updateConfig { $0.hiddenLayerCount = count }
+    }
+
+    func setHiddenLayerSize(_ size: Int, at index: Int) {
+        updateConfig { config in
+            guard config.hiddenLayerSizes.indices.contains(index) else {
+                return
+            }
+            config.hiddenLayerSizes[index] = size
+        }
     }
 
     func rerun() {
@@ -66,33 +102,42 @@ final class TrainingController {
 
         let activeToken = runToken
         let activeConfig = config
-        let targetSamples = RegressionDataFactory.makeTrainingSamples(
+        let trainingExamples = RegressionDataFactory.makeTrainingExamples(
             target: activeConfig.target,
+            features: activeConfig.features,
             noise: activeConfig.noise,
             seed: activeConfig.seed,
             count: activeConfig.sampleCount
         )
+        let targetSamples = trainingExamples.map(\.point)
         let initialSeed = activeConfig.seed ^ 0xA11C_E5EED
         let publishDelay = Duration.milliseconds(18)
+        let widths = [activeConfig.features.count] + activeConfig.activeHiddenLayerSizes + [1]
 
         self.targetSamples = targetSamples
         self.latestSnapshot = nil
         self.isTraining = true
 
         trainingTask = Task.detached(priority: .userInitiated) { [evaluationXs] in
-            var model = TinyMLP(seed: initialSeed, activation: activeConfig.activation)
+            var model = TinyMLP(seed: initialSeed, activation: activeConfig.activation, widths: widths)
             var optimizerState = TinyMLP.OptimizerState.make(for: model.layers)
+            let probeX = Self.visualizationProbeX
 
             var history: [LossPoint] = []
-            let initialLoss = model.averageLoss(on: targetSamples, kind: activeConfig.loss)
+            let initialLoss = model.averageLoss(on: trainingExamples, kind: activeConfig.loss)
             history.append(LossPoint(epoch: 0, loss: initialLoss))
 
             let initialSnapshot = EpochSnapshot(
                 epoch: 0,
                 totalEpochs: activeConfig.epochCount,
                 currentLoss: initialLoss,
-                predictionCurve: model.predictionCurve(xs: evaluationXs),
-                lossHistory: history
+                predictionCurve: model.predictionCurve(xs: evaluationXs, features: activeConfig.features),
+                lossHistory: history,
+                network: model.makeNetworkSnapshot(
+                    features: activeConfig.features,
+                    hiddenLayerSizes: activeConfig.activeHiddenLayerSizes,
+                    probeX: probeX
+                )
             )
 
             await MainActor.run { [weak self] in
@@ -106,7 +151,7 @@ final class TrainingController {
                 for epoch in 1...activeConfig.epochCount {
                     try Task.checkCancellation()
 
-                    let loss = model.trainEpoch(samples: targetSamples, config: activeConfig, optimizerState: &optimizerState)
+                    let loss = model.trainEpoch(examples: trainingExamples, config: activeConfig, optimizerState: &optimizerState)
                     history.append(LossPoint(epoch: epoch, loss: loss))
 
                     if Self.shouldPublish(epoch: epoch, totalEpochs: activeConfig.epochCount) {
@@ -114,8 +159,13 @@ final class TrainingController {
                             epoch: epoch,
                             totalEpochs: activeConfig.epochCount,
                             currentLoss: loss,
-                            predictionCurve: model.predictionCurve(xs: evaluationXs),
-                            lossHistory: history
+                            predictionCurve: model.predictionCurve(xs: evaluationXs, features: activeConfig.features),
+                            lossHistory: history,
+                            network: model.makeNetworkSnapshot(
+                                features: activeConfig.features,
+                                hiddenLayerSizes: activeConfig.activeHiddenLayerSizes,
+                                probeX: probeX
+                            )
                         )
 
                         await MainActor.run { [weak self] in
@@ -134,8 +184,13 @@ final class TrainingController {
                     epoch: activeConfig.epochCount,
                     totalEpochs: activeConfig.epochCount,
                     currentLoss: finalLoss,
-                    predictionCurve: model.predictionCurve(xs: evaluationXs),
-                    lossHistory: history
+                    predictionCurve: model.predictionCurve(xs: evaluationXs, features: activeConfig.features),
+                    lossHistory: history,
+                    network: model.makeNetworkSnapshot(
+                        features: activeConfig.features,
+                        hiddenLayerSizes: activeConfig.activeHiddenLayerSizes,
+                        probeX: probeX
+                    )
                 )
 
                 await MainActor.run { [weak self] in
@@ -170,4 +225,6 @@ final class TrainingController {
             return epoch.isMultiple(of: 16)
         }
     }
+
+    nonisolated private static let visualizationProbeX = 0.75
 }

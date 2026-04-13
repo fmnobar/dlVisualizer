@@ -98,7 +98,7 @@ struct TinyMLP {
     let activation: ActivationKind
     var layers: [DenseLayer]
 
-    init(seed: UInt64, activation: ActivationKind, widths: [Int] = [1, 32, 32, 1]) {
+    init(seed: UInt64, activation: ActivationKind, widths: [Int]) {
         self.activation = activation
         var generator = SeededRandomNumberGenerator(seed: seed)
         var builtLayers: [DenseLayer] = []
@@ -118,29 +118,115 @@ struct TinyMLP {
         self.layers = builtLayers
     }
 
-    func predict(_ x: Double) -> Double {
-        forward([x]).activations.last?.first ?? 0
+    func predict(inputs: [Double]) -> Double {
+        forward(inputs).activations.last?.first ?? 0
     }
 
-    func predictionCurve(xs: [Double]) -> [SamplePoint] {
+    func predict(x: Double, features: [FeatureKind]) -> Double {
+        predict(inputs: RegressionDataFactory.featureVector(for: x, features: features))
+    }
+
+    func predictionCurve(xs: [Double], features: [FeatureKind]) -> [SamplePoint] {
         xs.map { x in
-            SamplePoint(x: x, y: predict(x))
+            SamplePoint(x: x, y: predict(x: x, features: features))
         }
     }
 
-    func averageLoss(on samples: [SamplePoint], kind: LossKind) -> Double {
-        guard !samples.isEmpty else {
+    func averageLoss(on examples: [TrainingExample], kind: LossKind) -> Double {
+        guard !examples.isEmpty else {
             return 0
         }
 
-        let total = samples.reduce(into: 0.0) { partialResult, sample in
-            partialResult += kind.value(prediction: predict(sample.x), target: sample.y)
+        let total = examples.reduce(into: 0.0) { partialResult, example in
+            partialResult += kind.value(prediction: predict(inputs: example.inputs), target: example.point.y)
         }
-        return total / Double(samples.count)
+        return total / Double(examples.count)
     }
 
-    mutating func trainEpoch(samples: [SamplePoint], config: TrainingConfig, optimizerState: inout OptimizerState) -> Double {
-        guard !samples.isEmpty else {
+    func makeNetworkSnapshot(features: [FeatureKind], hiddenLayerSizes: [Int], probeX: Double) -> NetworkSnapshot {
+        let inputValues = RegressionDataFactory.featureVector(for: probeX, features: features)
+        let cache = forward(inputValues)
+
+        var layersSnapshot: [NetworkLayerSnapshot] = [
+            NetworkLayerSnapshot(
+                id: "features",
+                title: "Features",
+                nodes: zip(features, inputValues).enumerated().map { index, pair in
+                    let (feature, value) = pair
+                    return NetworkNodeSnapshot(
+                        id: "feature-\(index)",
+                        label: feature.rawValue,
+                        value: value,
+                        kind: .feature
+                    )
+                }
+            )
+        ]
+
+        for (layerIndex, width) in hiddenLayerSizes.enumerated() {
+            let activations = cache.activations[layerIndex + 1]
+            let nodes = (0..<width).map { neuronIndex in
+                NetworkNodeSnapshot(
+                    id: "hidden-\(layerIndex)-\(neuronIndex)",
+                    label: "H\(layerIndex + 1).\(neuronIndex + 1)",
+                    value: activations[neuronIndex],
+                    kind: .hidden
+                )
+            }
+            layersSnapshot.append(
+                NetworkLayerSnapshot(
+                    id: "hidden-\(layerIndex)",
+                    title: "Hidden \(layerIndex + 1)",
+                    nodes: nodes
+                )
+            )
+        }
+
+        let outputValue = cache.activations.last?.first ?? 0
+        layersSnapshot.append(
+            NetworkLayerSnapshot(
+                id: "output",
+                title: "Output",
+                nodes: [
+                    NetworkNodeSnapshot(
+                        id: "output-0",
+                        label: "y_hat",
+                        value: outputValue,
+                        kind: .output
+                    )
+                ]
+            )
+        )
+
+        var connections: [NetworkConnectionSnapshot] = []
+        for layerIndex in self.layers.indices {
+            let denseLayer = self.layers[layerIndex]
+            for outputIndex in 0..<denseLayer.outputSize {
+                for inputIndex in 0..<denseLayer.inputSize {
+                    let weightIndex = outputIndex * denseLayer.inputSize + inputIndex
+                    connections.append(
+                        NetworkConnectionSnapshot(
+                            id: "connection-\(layerIndex)-\(inputIndex)-\(outputIndex)",
+                            fromLayerIndex: layerIndex,
+                            fromNodeIndex: inputIndex,
+                            toLayerIndex: layerIndex + 1,
+                            toNodeIndex: outputIndex,
+                            weight: denseLayer.weights[weightIndex]
+                        )
+                    )
+                }
+            }
+        }
+
+        return NetworkSnapshot(
+            probeX: probeX,
+            layers: layersSnapshot,
+            connections: connections
+        )
+    }
+
+    mutating func trainEpoch(examples: [TrainingExample], config: TrainingConfig, optimizerState: inout OptimizerState) -> Double {
+        guard !examples.isEmpty else {
             return 0
         }
 
@@ -148,12 +234,12 @@ struct TinyMLP {
         var epochLoss = 0.0
         let lastLayerIndex = layers.count - 1
 
-        for sample in samples {
-            let cache = forward([sample.x])
+        for example in examples {
+            let cache = forward(example.inputs)
             let prediction = cache.activations[lastLayerIndex + 1][0]
-            epochLoss += config.loss.value(prediction: prediction, target: sample.y)
+            epochLoss += config.loss.value(prediction: prediction, target: example.point.y)
 
-            var downstream = [config.loss.derivative(prediction: prediction, target: sample.y)]
+            var downstream = [config.loss.derivative(prediction: prediction, target: example.point.y)]
             gradients.accumulate(
                 layer: lastLayerIndex,
                 input: cache.activations[lastLayerIndex],
@@ -187,7 +273,7 @@ struct TinyMLP {
             }
         }
 
-        let sampleScale = 1.0 / Double(samples.count)
+        let sampleScale = 1.0 / Double(examples.count)
         gradients.scale(by: sampleScale)
         epochLoss *= sampleScale
 

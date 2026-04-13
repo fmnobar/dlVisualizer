@@ -3,11 +3,13 @@ import XCTest
 
 final class DLExplorerTests: XCTestCase {
     func testDatasetGenerationIsDeterministic() {
-        let lhs = RegressionDataFactory.makeTrainingSamples(target: .sineWave, noise: 0.05, seed: 123, count: 48)
-        let rhs = RegressionDataFactory.makeTrainingSamples(target: .sineWave, noise: 0.05, seed: 123, count: 48)
+        let features: [FeatureKind] = [.x, .sine, .bias]
+        let lhs = RegressionDataFactory.makeTrainingExamples(target: .sineWave, features: features, noise: 0.05, seed: 123, count: 48)
+        let rhs = RegressionDataFactory.makeTrainingExamples(target: .sineWave, features: features, noise: 0.05, seed: 123, count: 48)
 
         XCTAssertEqual(lhs, rhs)
         XCTAssertEqual(lhs.count, 48)
+        XCTAssertEqual(lhs.first?.inputs.count, features.count)
     }
 
     func testAlternativeTargetsProduceDistinctCurves() {
@@ -35,13 +37,18 @@ final class DLExplorerTests: XCTestCase {
     }
 
     func testOptimizersMoveLossInTheRightDirection() {
-        let samples = RegressionDataFactory.makeTrainingSamples(target: .cubicCurve, noise: 0, seed: 9, count: 24)
+        let features: [FeatureKind] = [.x, .xSquared, .bias]
+        let examples = RegressionDataFactory.makeTrainingExamples(target: .cubicCurve, features: features, noise: 0, seed: 9, count: 24)
+        let widths = [features.count, 5, 3, 1]
 
         for optimizer in OptimizerKind.allCases {
-            var model = TinyMLP(seed: 5, activation: .tanh)
+            var model = TinyMLP(seed: 5, activation: .tanh, widths: widths)
             var optimizerState = TinyMLP.OptimizerState.make(for: model.layers)
             let config = TrainingConfig(
                 target: .cubicCurve,
+                features: features,
+                hiddenLayerCount: 2,
+                hiddenLayerSizes: [5, 3, 3],
                 sampleCount: 24,
                 seed: 9,
                 optimizer: optimizer,
@@ -52,11 +59,11 @@ final class DLExplorerTests: XCTestCase {
                 noise: 0
             )
 
-            let initialLoss = model.averageLoss(on: samples, kind: .mse)
+            let initialLoss = model.averageLoss(on: examples, kind: .mse)
             for _ in 0..<config.epochCount {
-                _ = model.trainEpoch(samples: samples, config: config, optimizerState: &optimizerState)
+                _ = model.trainEpoch(examples: examples, config: config, optimizerState: &optimizerState)
             }
-            let finalLoss = model.averageLoss(on: samples, kind: .mse)
+            let finalLoss = model.averageLoss(on: examples, kind: .mse)
 
             XCTAssertLessThan(finalLoss, initialLoss, "\(optimizer.rawValue) should reduce the loss on a deterministic sample set.")
         }
@@ -64,22 +71,39 @@ final class DLExplorerTests: XCTestCase {
 
     func testBaselineConfigurationLearnsTheTargetCurve() {
         let config = TrainingConfig()
-        let samples = RegressionDataFactory.makeTrainingSamples(
+        let examples = RegressionDataFactory.makeTrainingExamples(
             target: config.target,
+            features: config.features,
             noise: config.noise,
             seed: config.seed,
             count: config.sampleCount
         )
-        var model = TinyMLP(seed: config.seed ^ 0xA11C_E5EED, activation: config.activation)
+        let widths = [config.features.count] + config.activeHiddenLayerSizes + [1]
+        var model = TinyMLP(seed: config.seed ^ 0xA11C_E5EED, activation: config.activation, widths: widths)
         var optimizerState = TinyMLP.OptimizerState.make(for: model.layers)
 
-        let initialLoss = model.averageLoss(on: samples, kind: config.loss)
+        let initialLoss = model.averageLoss(on: examples, kind: config.loss)
         for _ in 0..<400 {
-            _ = model.trainEpoch(samples: samples, config: config, optimizerState: &optimizerState)
+            _ = model.trainEpoch(examples: examples, config: config, optimizerState: &optimizerState)
         }
-        let finalLoss = model.averageLoss(on: samples, kind: config.loss)
+        let finalLoss = model.averageLoss(on: examples, kind: config.loss)
 
         XCTAssertLessThan(finalLoss, initialLoss * 0.4)
+    }
+
+    func testNetworkSnapshotReflectsSelectedFeaturesAndHiddenLayers() {
+        let features: [FeatureKind] = [.x, .absolute, .bias]
+        let hiddenLayers = [4, 2]
+        let widths = [features.count] + hiddenLayers + [1]
+        let model = TinyMLP(seed: 17, activation: .sigmoid, widths: widths)
+
+        let snapshot = model.makeNetworkSnapshot(features: features, hiddenLayerSizes: hiddenLayers, probeX: 0.75)
+
+        XCTAssertEqual(snapshot.layers.count, 4)
+        XCTAssertEqual(snapshot.layers.first?.nodes.count, features.count)
+        XCTAssertEqual(snapshot.layers[1].nodes.count, 4)
+        XCTAssertEqual(snapshot.layers[2].nodes.count, 2)
+        XCTAssertEqual(snapshot.layers.last?.nodes.count, 1)
     }
 
     private func learningRate(for optimizer: OptimizerKind) -> Double {
