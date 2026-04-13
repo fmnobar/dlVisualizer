@@ -7,7 +7,7 @@ import random
 import subprocess
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter
 
 
 SIZE = 1024
@@ -167,58 +167,49 @@ def concept_network_curve() -> Image.Image:
 
 def concept_heatmap_curve() -> Image.Image:
     canvas, panel_bounds = make_canvas()
-    add_shadow(canvas, panel_bounds)
     fill_panel_gradient(
         canvas,
         panel_bounds,
-        rgba("#FFF9F3"),
-        rgba("#FFECDC"),
-        rgba("#FFC18A"),
+        rgba("#FFFFFF"),
+        rgba("#FFFFFF"),
+        rgba("#FFFFFF"),
     )
 
-    add_glow(canvas, (330, 300), 210, rgba("#FFA86B", 70))
-    add_glow(canvas, (740, 780), 180, rgba("#86B6FF", 64))
     draw = ImageDraw.Draw(canvas)
 
-    start_x = 180
-    start_y = 220
-    cell = 112
-    gap = 18
+    start_x = 104
+    start_y = 104
+    cell = 146
+    gap = 10
     values = [
-        [0.15, 0.35, 0.55, 0.8],
-        [0.22, 0.45, 0.7, 0.92],
-        [0.3, 0.58, 0.82, 0.95],
-        [0.18, 0.4, 0.63, 0.78],
+        [0.12, 0.2, 0.3, 0.44, 0.58],
+        [0.14, 0.24, 0.34, 0.48, 0.62],
+        [0.16, 0.27, 0.38, 0.52, 0.66],
+        [0.18, 0.29, 0.4, 0.55, 0.68],
+        [0.2, 0.31, 0.42, 0.57, 0.7],
     ]
     for row, row_values in enumerate(values):
         for column, value in enumerate(row_values):
             x0 = start_x + column * (cell + gap)
             y0 = start_y + row * (cell + gap)
-            blend = (
-                int(72 + (180 * value)),
-                int(110 + (70 * (1 - value))),
-                int(220 - (90 * value)),
-                230,
-            )
+            tone = int(242 - (value * 118))
+            blend = (tone, tone, tone, 232)
             draw.rounded_rectangle((x0, y0, x0 + cell, y0 + cell), radius=26, fill=blend)
 
-    axis_color = rgba("#3F556E", 90)
-    draw.line((170, 835, 870, 835), fill=axis_color, width=5)
-    draw.line((170, 170, 170, 835), fill=axis_color, width=5)
-
     curve_points: list[tuple[float, float]] = []
-    for index in range(170):
-        t = index / 169.0
-        x = 230 + t * 560
-        y = 710 - (math.sin((t * 2.1) + 0.2) * 165) - (t * 70)
+    for index in range(220):
+        t = index / 219.0
+        x = 124 + t * 732
+        y = 820 - (150 * t) - (58 * math.sin(t * 2.2))
         curve_points.append((x, y))
-    draw_curve(draw, curve_points, rgba("#155EEA"), 18)
+    draw_curve(draw, curve_points, rgba("#111111"), 18)
 
     for index in range(7):
-        t = 0.08 + index * 0.13
-        x = 230 + t * 560
-        y = 710 - (math.sin((t * 2.1) + 0.2) * 165) - (t * 70)
-        draw.ellipse((x - 11, y - 11, x + 11, y + 11), fill=rgba("#FF704D"))
+        t = 0.06 + index * 0.12
+        x = 124 + t * 732
+        y = 820 - (150 * t) - (58 * math.sin(t * 2.2))
+        draw.ellipse((x - 11, y - 11, x + 11, y + 11), fill=rgba("#FFFFFF"))
+        draw.ellipse((x - 11, y - 11, x + 11, y + 11), outline=rgba("#121212"), width=4)
 
     return canvas
 
@@ -306,7 +297,7 @@ def main() -> None:
     for file_name, image in concepts.items():
         image.save(CONCEPTS_DIR / file_name)
 
-    export_iconset(concepts["dl-visualizer-icon-network-curve.png"])
+    export_iconset(concepts["dl-visualizer-icon-heatmap-curve.png"])
 
 
 if __name__ == "__main__":
