@@ -2,12 +2,12 @@ import AppKit
 import SwiftUI
 
 @main
-struct DLExplorerApp: App {
+struct DLVisualizerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var controller = TrainingController()
 
     var body: some Scene {
-        WindowGroup("DL Explorer", id: "main") {
+        WindowGroup("DL Visualizer", id: "main") {
             ContentView(controller: controller)
                 .frame(minWidth: 1120, idealWidth: 1260, minHeight: 760, idealHeight: 840)
         }

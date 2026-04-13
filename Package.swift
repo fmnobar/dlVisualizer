@@ -9,18 +9,18 @@ let package = Package(
     ],
     products: [
         .executable(
-            name: "DLExplorer",
-            targets: ["DLExplorer"]
+            name: "DLVisualizer",
+            targets: ["DLVisualizer"]
         )
     ],
     targets: [
         .executableTarget(
-            name: "DLExplorer",
+            name: "DLVisualizer",
             path: "Sources/DLExplorer"
         ),
         .testTarget(
-            name: "DLExplorerTests",
-            dependencies: ["DLExplorer"],
+            name: "DLVisualizerTests",
+            dependencies: ["DLVisualizer"],
             path: "Tests/DLExplorerTests"
         )
     ]

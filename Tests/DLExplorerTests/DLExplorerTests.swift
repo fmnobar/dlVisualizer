@@ -1,7 +1,7 @@
 import XCTest
-@testable import DLExplorer
+@testable import DLVisualizer
 
-final class DLExplorerTests: XCTestCase {
+final class DLVisualizerTests: XCTestCase {
     func testDatasetGenerationIsDeterministic() {
         let features: [FeatureKind] = [.x, .sine, .bias]
         let lhs = RegressionDataFactory.makeTrainingExamples(target: .sineWave, features: features, noise: 0.05, seed: 123, count: 48)

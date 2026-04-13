@@ -45,7 +45,7 @@ struct ContentView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("DL Explorer")
+            Text("DL Visualizer")
                 .font(.system(size: 30, weight: .semibold, design: .rounded))
 
             Text("Watch a tiny network learn \(controller.targetEquation) from noisy data in real time, with a live playground-style network view.")
