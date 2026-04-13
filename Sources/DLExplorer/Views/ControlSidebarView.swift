@@ -31,9 +31,50 @@ struct ControlSidebarView: View {
     private var dataSection: some View {
         GroupBox("Data") {
             VStack(alignment: .leading, spacing: 14) {
-                labeledValue("Target", value: controller.targetEquation)
-                labeledValue("Samples", value: "\(RegressionDataFactory.trainingSampleCount)")
-                labeledValue("Seed", value: "\(controller.seed)")
+                menuRow(
+                    title: "Target",
+                    selection: Binding(
+                        get: { controller.config.target },
+                        set: { value in
+                            controller.updateConfig { $0.target = value }
+                        }
+                    ),
+                    values: TargetKind.allCases
+                )
+
+                Text(controller.targetEquation)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                editableIntegerRow(
+                    title: "Samples",
+                    value: Binding(
+                        get: { controller.config.sampleCount },
+                        set: { newValue in
+                            controller.updateConfig { config in
+                                config.sampleCount = newValue
+                            }
+                        }
+                    )
+                )
+
+                editableIntegerRow(
+                    title: "Seed",
+                    value: Binding(
+                        get: {
+                            if controller.config.seed > UInt64(Int.max) {
+                                return Int.max
+                            }
+                            return Int(controller.config.seed)
+                        },
+                        set: { newValue in
+                            controller.updateConfig { config in
+                                config.seed = UInt64(max(0, newValue))
+                            }
+                        }
+                    )
+                )
 
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -177,6 +218,18 @@ struct ControlSidebarView: View {
             Text(value)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
+        }
+        .font(.subheadline)
+    }
+
+    private func editableIntegerRow(title: String, value: Binding<Int>) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+            Spacer(minLength: 12)
+            TextField(title, value: value, format: .number)
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 88)
         }
         .font(.subheadline)
     }

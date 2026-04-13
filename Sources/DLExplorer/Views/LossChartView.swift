@@ -49,10 +49,12 @@ struct LossChartView: View {
                 }
                 .chartXScale(domain: 0...(snapshot?.totalEpochs ?? 1))
                 .chartYScale(domain: 0...maxLoss)
-                .chartXAxisLabel("epoch")
-                .chartYAxisLabel("loss")
-                .frame(maxWidth: .infinity, minHeight: 170)
+                .chartYAxis {
+                    AxisMarks(position: .leading)
+                }
+                .frame(maxWidth: .infinity, minHeight: 190)
             }
+            .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

@@ -8,7 +8,9 @@ struct ContentView: View {
             ControlSidebarView(controller: controller)
                 .frame(minWidth: 290, idealWidth: 320, maxWidth: 340)
 
-            rightColumn
+            ScrollView {
+                rightColumn
+            }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(.background)
@@ -25,12 +27,13 @@ struct ContentView: View {
                 architecture: controller.architecture,
                 isTraining: controller.isTraining
             )
-            .frame(maxWidth: .infinity, minHeight: 430)
+            .frame(maxWidth: .infinity, minHeight: 470)
 
             LossChartView(snapshot: controller.latestSnapshot, isTraining: controller.isTraining)
-                .frame(maxWidth: .infinity, minHeight: 210)
+                .frame(maxWidth: .infinity, minHeight: 260)
         }
         .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var header: some View {
@@ -49,7 +52,7 @@ struct ContentView: View {
                     .padding(.vertical, 6)
                     .background(.quaternary, in: Capsule())
 
-                Text("Seed \(controller.seed)")
+                Text("Seed \(controller.config.seed)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

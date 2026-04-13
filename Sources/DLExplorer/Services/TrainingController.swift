@@ -7,25 +7,28 @@ final class TrainingController {
     private(set) var targetSamples: [SamplePoint] = []
     private(set) var latestSnapshot: EpochSnapshot?
     private(set) var isTraining = false
-    private(set) var seed: UInt64
     var config: TrainingConfig
 
     let architecture = "[1, 32, 32, 1]"
-    let targetEquation = "f(x) = 1 / (1 + x^2)"
 
     private let evaluationXs = RegressionDataFactory.makeEvaluationGrid()
     private var scheduledRestartTask: Task<Void, Never>?
     private var trainingTask: Task<Void, Never>?
     private var runToken = UUID()
 
-    init(config: TrainingConfig = TrainingConfig(), seed: UInt64 = 42) {
+    var targetEquation: String {
+        config.target.equation
+    }
+
+    init(config: TrainingConfig = TrainingConfig()) {
         self.config = config
-        self.seed = seed
         restartTraining(immediate: true)
     }
 
     func updateConfig(_ mutate: (inout TrainingConfig) -> Void) {
         mutate(&config)
+        config.sampleCount = min(max(config.sampleCount, TrainingConfig.sampleCountRange.lowerBound), TrainingConfig.sampleCountRange.upperBound)
+        config.epochCount = min(max(config.epochCount, TrainingConfig.epochRange.lowerBound), TrainingConfig.epochRange.upperBound)
         restartTraining()
     }
 
@@ -34,7 +37,7 @@ final class TrainingController {
     }
 
     func resetSeed() {
-        seed &+= 1
+        config.seed &+= 1
         restartTraining(immediate: true)
     }
 
@@ -63,12 +66,17 @@ final class TrainingController {
 
         let activeToken = runToken
         let activeConfig = config
-        let activeSeed = seed
-        let targetSamples = RegressionDataFactory.makeTrainingSamples(noise: activeConfig.noise, seed: activeSeed)
-        let initialSeed = activeSeed ^ 0xA11C_E5EED
+        let targetSamples = RegressionDataFactory.makeTrainingSamples(
+            target: activeConfig.target,
+            noise: activeConfig.noise,
+            seed: activeConfig.seed,
+            count: activeConfig.sampleCount
+        )
+        let initialSeed = activeConfig.seed ^ 0xA11C_E5EED
         let publishDelay = Duration.milliseconds(18)
 
         self.targetSamples = targetSamples
+        self.latestSnapshot = nil
         self.isTraining = true
 
         trainingTask = Task.detached(priority: .userInitiated) { [evaluationXs] in

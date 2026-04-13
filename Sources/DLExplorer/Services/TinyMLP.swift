@@ -250,6 +250,56 @@ struct TinyMLP {
                 }
             }
 
+        case .nesterov:
+            let momentum = 0.9
+            for layerIndex in layers.indices {
+                for weightIndex in layers[layerIndex].weights.indices {
+                    let previousVelocity = state.firstMomentWeights[layerIndex][weightIndex]
+                    let velocity = momentum * previousVelocity - learningRate * gradients.weightGrads[layerIndex][weightIndex]
+                    state.firstMomentWeights[layerIndex][weightIndex] = velocity
+                    layers[layerIndex].weights[weightIndex] += (-momentum * previousVelocity) + ((1.0 + momentum) * velocity)
+                }
+                for biasIndex in layers[layerIndex].biases.indices {
+                    let previousVelocity = state.firstMomentBiases[layerIndex][biasIndex]
+                    let velocity = momentum * previousVelocity - learningRate * gradients.biasGrads[layerIndex][biasIndex]
+                    state.firstMomentBiases[layerIndex][biasIndex] = velocity
+                    layers[layerIndex].biases[biasIndex] += (-momentum * previousVelocity) + ((1.0 + momentum) * velocity)
+                }
+            }
+
+        case .rmsProp:
+            let decay = 0.99
+            let epsilon = 1e-8
+            for layerIndex in layers.indices {
+                for weightIndex in layers[layerIndex].weights.indices {
+                    let grad = gradients.weightGrads[layerIndex][weightIndex]
+                    state.secondMomentWeights[layerIndex][weightIndex] =
+                        decay * state.secondMomentWeights[layerIndex][weightIndex] + (1.0 - decay) * grad * grad
+                    layers[layerIndex].weights[weightIndex] -= learningRate * grad / (sqrt(state.secondMomentWeights[layerIndex][weightIndex]) + epsilon)
+                }
+                for biasIndex in layers[layerIndex].biases.indices {
+                    let grad = gradients.biasGrads[layerIndex][biasIndex]
+                    state.secondMomentBiases[layerIndex][biasIndex] =
+                        decay * state.secondMomentBiases[layerIndex][biasIndex] + (1.0 - decay) * grad * grad
+                    layers[layerIndex].biases[biasIndex] -= learningRate * grad / (sqrt(state.secondMomentBiases[layerIndex][biasIndex]) + epsilon)
+                }
+            }
+
+        case .adaGrad:
+            let epsilon = 1e-8
+            for layerIndex in layers.indices {
+                for weightIndex in layers[layerIndex].weights.indices {
+                    let grad = gradients.weightGrads[layerIndex][weightIndex]
+                    state.secondMomentWeights[layerIndex][weightIndex] += grad * grad
+                    layers[layerIndex].weights[weightIndex] -= learningRate * grad / (sqrt(state.secondMomentWeights[layerIndex][weightIndex]) + epsilon)
+                }
+                for biasIndex in layers[layerIndex].biases.indices {
+                    let grad = gradients.biasGrads[layerIndex][biasIndex]
+                    state.secondMomentBiases[layerIndex][biasIndex] += grad * grad
+                    layers[layerIndex].biases[biasIndex] -= learningRate * grad / (sqrt(state.secondMomentBiases[layerIndex][biasIndex]) + epsilon)
+                }
+            }
+
         case .adam:
             state.step += 1
             let beta1 = 0.9

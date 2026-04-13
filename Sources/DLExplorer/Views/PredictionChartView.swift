@@ -15,6 +15,7 @@ struct PredictionChartView: View {
                 chart
                 footer
             }
+            .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -71,10 +72,11 @@ struct PredictionChartView: View {
             }
         }
         .chartXScale(domain: RegressionDataFactory.xRange)
-        .chartYScale(domain: -0.1...1.12)
-        .chartXAxisLabel("x")
-        .chartYAxisLabel("y")
-        .frame(maxWidth: .infinity, minHeight: 390)
+        .chartYScale(domain: yDomain)
+        .chartYAxis {
+            AxisMarks(position: .leading)
+        }
+        .frame(maxWidth: .infinity, minHeight: 380)
     }
 
     private var footer: some View {
@@ -83,9 +85,24 @@ struct PredictionChartView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Text("Widths \(architecture) | Activation \(config.activation.rawValue) | Loss \(config.loss.rawValue) | Optimizer \(config.optimizer.rawValue)\(isTraining ? " | Live" : "")")
+            Text("Target \(config.target.rawValue) | Samples \(config.sampleCount) | Widths \(architecture)")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Text("Activation \(config.activation.rawValue) | Loss \(config.loss.rawValue) | Optimizer \(config.optimizer.rawValue)\(isTraining ? " | Live" : "")")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var yDomain: ClosedRange<Double> {
+        let yValues = targetSamples.map(\.y) + (snapshot?.predictionCurve.map(\.y) ?? [])
+        guard let minY = yValues.min(), let maxY = yValues.max() else {
+            return -1.0...1.0
+        }
+
+        let span = max(maxY - minY, 0.25)
+        let padding = span * 0.12
+        return (minY - padding)...(maxY + padding)
     }
 }
